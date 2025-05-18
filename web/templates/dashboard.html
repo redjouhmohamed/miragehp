@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Honeypot Dashboard</h1>
+
+<div class="dashboard-grid">
+    <div class="dashboard-card">
+        <h2>Recent Web Login Attempts</h2>
+        <div id="web-login-attempts">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>IP Address</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                    </tr>
+                </thead>
+                <tbody id="web-login-attempts-body">
+                    <!-- Will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="dashboard-card">
+        <h2>Recent SSH Login Attempts</h2>
+        <div id="ssh-login-attempts">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>IP Address</th>
+                        <th>Username</th>
+                        <th>Password</th>
+                    </tr>
+                </thead>
+                <tbody id="ssh-login-attempts-body">
+                    <!-- Will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="dashboard-card">
+        <h2>Honeypot Status</h2>
+        <div class="status-info">
+            <p><strong>Host:</strong> <span id="honeypot-host">{{ honeypot_host }}</span></p>
+            <p><strong>Port:</strong> <span id="honeypot-port">{{ honeypot_port }}</span></p>
+            <p><strong>Status:</strong> <span id="honeypot-status" class="status-active">Active</span></p>
+            <p><strong>Last Updated:</strong> <span id="last-updated"></span></p>
+        </div>
+    </div>
+    
+    <div class="dashboard-card">
+        <h2>Attempt Statistics</h2>
+        <div id="attempt-stats">
+            <!-- Will be populated by JavaScript -->
+            <p>Loading statistics...</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add a link to the logs page -->
+<div class="dashboard-footer">
+    <a href="/logs" class="btn btn-primary">View Full Logs</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Add timestamp to prevent caching
+function getTimestampedUrl(url) {
+    return url + (url.includes('?') ? '&' : '?') + '_t=' + new Date().getTime();
+}
+
+// Fetch web login attempts
+function fetchWebLoginAttempts() {
+    fetch(getTimestampedUrl('/api/honeypot/web-login-attempts'))
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const tableBody = document.getElementById('web-login-attempts-body');
+            tableBody.innerHTML = '';
+            
+            if (data.length === 0) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;
+                cell.textContent = 'No web login attempts recorded';
+                cell.style.textAlign = 'center';
+                row.appendChild(cell);
+                tableBody.appendChild(row);
+                return;
+            }
+            
+            data.forEach(attempt => {
+                const row = document.createElement('tr');
+                
+                const timeCell = document.createElement('td');
+                timeCell.textContent = attempt.timestamp;
+                
+                const ipCell = document.createElement('td');
+                ipCell.textContent = attempt.ip;
+                
+                const usernameCell = document.createElement('td');
+                usernameCell.textContent = attempt.username || '-';
+                
+                const passwordCell = document.createElement('td');
+                passwordCell.textContent = attempt.password || '-';
+                
+                row.appendChild(timeCell);
+                row.appendChild(ipCell);
+                row.appendChild(usernameCell);
+                row.appendChild(passwordCell);
+                
+                tableBody.appendChild(row);
+            });
+            
+            // Update last updated time
+            document.getElementById('last-updated').textContent = new Date().toLocaleTimeString();
+        })
+        .catch(error => {
+            console.error('Error fetching web login attempts:', error);
+            const tableBody = document.getElementById('web-login-attempts-body');
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Error loading data</td></tr>';
+        });
+}
+
+// Fetch SSH login attempts
+function fetchSSHLoginAttempts() {
+    fetch(getTimestampedUrl('/api/honeypot/ssh-login-attempts'))
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const tableBody = document.getElementById('ssh-login-attempts-body');
+            tableBody.innerHTML = '';
+            
+            if (data.length === 0) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;
+                cell.textContent = 'No SSH login attempts recorded';
+                cell.style.textAlign = 'center';
+                row.appendChild(cell);
+                tableBody.appendChild(row);
+                return;
+            }
+            
+            data.forEach(attempt => {
+                const row = document.createElement('tr');
+                
+                const timeCell = document.createElement('td');
+                timeCell.textContent = attempt.timestamp;
+                
+                const ipCell = document.createElement('td');
+                ipCell.textContent = attempt.ip;
+                
+                const usernameCell = document.createElement('td');
+                usernameCell.textContent = attempt.username || '-';
+                
+                const passwordCell = document.createElement('td');
+                passwordCell.textContent = attempt.password || '-';
+                
+                row.appendChild(timeCell);
+                row.appendChild(ipCell);
+                row.appendChild(usernameCell);
+                row.appendChild(passwordCell);
+                
+                tableBody.appendChild(row);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching SSH login attempts:', error);
+            const tableBody = document.getElementById('ssh-login-attempts-body');
+            tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Error loading data</td></tr>';
+        });
+}
+
+// Fetch data initially and then every 10 seconds (reduced from 30 seconds for more frequent updates)
+fetchWebLoginAttempts();
+fetchSSHLoginAttempts();
+setInterval(fetchWebLoginAttempts, 10000);
+setInterval(fetchSSHLoginAttempts, 10000);
+
+// Add a manual refresh button functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshButton = document.createElement('button');
+    refreshButton.textContent = 'Refresh Data';
+    refreshButton.className = 'btn btn-primary';
+    refreshButton.style.marginTop = '10px';
+    refreshButton.onclick = function() {
+        fetchWebLoginAttempts();
+        fetchSSHLoginAttempts();
+    };
+    
+    const dashboardGrid = document.querySelector('.dashboard-grid');
+    dashboardGrid.parentNode.insertBefore(refreshButton, dashboardGrid);
+});
+</script>
+
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

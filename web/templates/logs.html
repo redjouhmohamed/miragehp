@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Logs</h1>
+
+<div class="dashboard-controls">
+    <div class="filters">
+        <div class="filter-group">
+            <label for="start-time">Start Time:</label>
+            <input type="datetime-local" id="start-time" name="start-time">
+        </div>
+        <div class="filter-group">
+            <label for="end-time">End Time:</label>
+            <input type="datetime-local" id="end-time" name="end-time">
+        </div>
+        <div class="filter-buttons">
+            <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+            <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+        </div>
+    </div>
+    <button id="refresh-logs" class="btn btn-primary">Refresh Logs</button>
+</div>
+
+<div id="loading-indicator" style="display: none; text-align: center; margin: 20px 0;">
+    <p>Loading logs...</p>
+</div>
+
+<table id="logs-table">
+    <thead>
+        <tr>
+            <th>Timestamp</th>
+            <th>IP Address</th>
+            <th>Port</th>
+            <th>Type</th>
+            <th>Username</th>
+            <th>Password</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody id="logs-body">
+        {% for log in logs %}
+        <tr class="{% if log.type == 'login_attempt' %}login-attempt{% endif %}">
+            <td>{{ log.timestamp }}</td>
+            <td>{{ log.ip }}</td>
+            <td>{{ log.port }}</td>
+            <td>{{ log.type if log.type else "access" }}</td>
+            <td>{{ log.username if log.username else "-" }}</td>
+            <td>{{ log.password if log.password else "-" }}</td>
+            <td>{{ log.data if log.data else log.raw_data if log.raw_data else "-" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div id="no-logs-message" style="display: none; text-align: center; margin: 20px 0;">
+    <p>No logs found matching the current filters.</p>
+</div>
+
+<p id="last-updated" style="text-align: right; font-style: italic; margin-top: 10px;"></p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allLogs = [];
+
+// Add timestamp to prevent caching
+function getTimestampedUrl(url) {
+    return url + (url.includes('?') ? '&' : '?') + '_t=' + new Date().getTime();
+}
+
+// Show loading indicator
+function showLoading() {
+    document.getElementById('loading-indicator').style.display = 'block';
+    document.getElementById('logs-table').style.display = 'none';
+    document.getElementById('no-logs-message').style.display = 'none';
+}
+
+// Hide loading indicator
+function hideLoading() {
+    document.getElementById('loading-indicator').style.display = 'none';
+    document.getElementById('logs-table').style.display = 'table';
+}
+
+// Fetch logs when page loads
+function fetchLogs() {
+    showLoading();
+    
+    fetch(getTimestampedUrl('/api/logs'))
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(logs => {
+            allLogs = logs;
+            // Sort logs by timestamp in descending order (most recent first)
+            allLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            displayLogs(allLogs);
+            
+            // Update last updated time
+            document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleString();
+            
+            hideLoading();
+        })
+        .catch(error => {
+            console.error('Error fetching logs:', error);
+            hideLoading();
+            document.getElementById('logs-body').innerHTML = 
+                '<tr><td colspan="7" style="text-align: center; color: red;">Error loading logs. Please try again.</td></tr>';
+        });
+}
+
+function displayLogs(logs) {
+    const tbody = document.getElementById('logs-body');
+    
+    if (logs.length === 0) {
+        document.getElementById('logs-table').style.display = 'none';
+        document.getElementById('no-logs-message').style.display = 'block';
+        return;
+    }
+    
+    document.getElementById('logs-table').style.display = 'table';
+    document.getElementById('no-logs-message').style.display = 'none';
+    
+    // Sort logs by timestamp in descending order before display
+    const sortedLogs = [...logs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    tbody.innerHTML = sortedLogs.map(log => `
+        <tr class="${log.type === 'login_attempt' ? 'login-attempt' : log.type === 'ssh_login_attempt' ? 'ssh-login-attempt' : ''}">
+            <td>${log.timestamp}</td>
+            <td>${log.ip}</td>
+            <td>${log.port}</td>
+            <td>${log.type || "access"}</td>
+            <td>${log.username || "-"}</td>
+            <td>${log.password || "-"}</td>
+            <td>${log.data || log.raw_data || "-"}</td>
+        </tr>
+    `).join('');
+}
+
+function applyFilters() {
+    const startTime = document.getElementById('start-time').value;
+    const endTime = document.getElementById('end-time').value;
+    
+    let filteredLogs = allLogs;
+    
+    if (startTime) {
+        filteredLogs = filteredLogs.filter(log => 
+            new Date(log.timestamp) >= new Date(startTime)
+        );
+    }
+    
+    if (endTime) {
+        filteredLogs = filteredLogs.filter(log => 
+            new Date(log.timestamp) <= new Date(endTime)
+        );
+    }
+    
+    displayLogs(filteredLogs);
+}
+
+function resetFilters() {
+    document.getElementById('start-time').value = '';
+    document.getElementById('end-time').value = '';
+    displayLogs(allLogs);
+}
+
+// Initial fetch
+fetchLogs();
+
+// Add event listener for refresh button
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('refresh-logs').addEventListener('click', fetchLogs);
+});
+</script>
+{% endblock %}
